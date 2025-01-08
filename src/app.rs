@@ -6,7 +6,7 @@ use objc::rc::autoreleasepool;
 use objc::rc::{StrongPtr, WeakPtr};
 use objc::runtime::{Class, Object, Sel};
 
-use std::{mem, ops::Deref, raw};
+use std::{mem, ops::Deref};
 
 bitflags::bitflags! {
     struct NSKeyValueObservingOptions: NSUInteger {
@@ -19,11 +19,17 @@ bitflags::bitflags! {
 
 use anyhow::Error;
 
+#[repr(C)]
+struct TraitObject {
+    data: *mut (),
+    vtable: *mut (),
+}
+
 fn get_callback(self_obj: &Object) -> *mut dyn Fn(id) {
     unsafe {
         let data: *mut libc::c_void = *self_obj.get_ivar("_data");
         let vtable: *mut libc::c_void = *self_obj.get_ivar("_vtable");
-        let trait_obj = raw::TraitObject {
+        let trait_obj = TraitObject {
             data: data.cast::<()>(),
             vtable: vtable.cast::<()>(),
         };
@@ -99,7 +105,7 @@ impl KeyValueObserver {
         unsafe {
             let boxed = Box::new(closure);
             let callback: *const dyn Fn(*mut Object) = Box::into_raw(boxed);
-            let trait_obj: raw::TraitObject = mem::transmute(callback);
+            let trait_obj: TraitObject = mem::transmute(callback);
             let observer: id = msg_send![*RUST_KVO_HELPER, new];
             (*observer).set_ivar("_data", trait_obj.data.cast::<libc::c_void>());
             (*observer).set_ivar("_vtable", trait_obj.vtable.cast::<libc::c_void>());
